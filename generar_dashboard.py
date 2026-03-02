@@ -3,11 +3,11 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import os
 
+# Cargar datos
 with open("tablero.json", "r", encoding="utf-8") as f:
     tablero = json.load(f)
 
 os.makedirs("dashboards", exist_ok=True)
-
 
 # =============================================
 # HELPERS
@@ -24,38 +24,32 @@ def clasificar_estado(ocs):
         return "En Ejecución"
     return "En Gestión"
 
-def color_estado(estado):
+def tailwind_estado(estado):
+    """Retorna clases de Tailwind según el estado para los badges"""
     if not estado:
-        return "#95a7b5"
+        return "bg-slate-100 text-slate-700 border-slate-200"
     e = estado.lower()
     if "finalizado" in e:
-        return "#27ae60"
-    elif "ejecución" in e or "ejecucion" in e:
-        return "#f39c12"
+        return "bg-green-100 text-green-700 border-green-200"
+    elif "ejecución" in e or "ejecucion" in e or "pendiente" in e:
+        return "bg-amber-100 text-amber-700 border-amber-200"
     else:
-        return "#e74c3c"
+        return "bg-red-100 text-red-700 border-red-200"
 
 def limpiar_presupuesto(valor):
-    if isinstance(valor, (int, float)):
-        return float(valor)
+    if isinstance(valor, (int, float)): return float(valor)
     v = str(valor).replace("$", "").replace(",", "").strip()
-    try:
-        return float(v)
-    except:
-        return 0.0
+    try: return float(v)
+    except: return 0.0
 
 def limpiar_num(valor):
-    if isinstance(valor, (int, float)):
-        return float(valor)
+    if isinstance(valor, (int, float)): return float(valor)
     v = str(valor).replace("$", "").replace("%", "").replace(",", "").strip()
-    try:
-        return float(v)
-    except:
-        return 0.0
+    try: return float(v)
+    except: return 0.0
 
 def fig_to_html(fig):
     return pio.to_html(fig, full_html=False, include_plotlyjs=False)
-
 
 # =============================================
 # GENERAMOS UN HTML POR PROYECTO
@@ -69,7 +63,8 @@ for proyecto in tablero:
     ocs       = proyecto["ocs"]
     presup    = limpiar_presupuesto(proyecto["presupuesto"])
     estado    = clasificar_estado(ocs)
-    color     = color_estado(estado)
+    estado_clase = tailwind_estado(estado)
+    
     adj_total = sum(oc["adjudicado"] for oc in ocs)
     pago_total= sum(oc["pagado"] for oc in ocs)
     pct_fin   = (pago_total / adj_total * 100) if adj_total > 0 else 0
@@ -83,317 +78,272 @@ for proyecto in tablero:
     oc_pag    = [oc["pagado"] for oc in ocs]
 
     fig_fin = go.Figure()
-    fig_fin.add_trace(go.Bar(
-        name="Adjudicado",
-        x=oc_labels, y=oc_adj,
-        marker_color="#3498db", opacity=0.5,
-        text=[f"${v:,.0f}" for v in oc_adj], textposition="outside"
-    ))
-    fig_fin.add_trace(go.Bar(
-        name="Pagado",
-        x=oc_labels, y=oc_pag,
-        marker_color="#2ecc71",
-        text=[f"${v:,.0f}" for v in oc_pag], textposition="outside"
-    ))
-    fig_fin.update_layout(
-        title="💰 Avance Financiero por OC",
-        barmode="overlay",
-        yaxis_title="Monto ($)", xaxis_title="Orden de Compra",
-        legend=dict(orientation="h", y=-0.2),
-        plot_bgcolor="white", height=400
-    )
+    fig_fin.add_trace(go.Bar(name="Adjudicado", x=oc_labels, y=oc_adj, marker_color="#3498db", opacity=0.5, text=[f"${v:,.0f}" for v in oc_adj], textposition="outside"))
+    fig_fin.add_trace(go.Bar(name="Pagado", x=oc_labels, y=oc_pag, marker_color="#2ecc71", text=[f"${v:,.0f}" for v in oc_pag], textposition="outside"))
+    fig_fin.update_layout(title="💰 Avance Financiero por OC", barmode="overlay", yaxis_title="Monto ($)", xaxis_title="Orden de Compra", legend=dict(orientation="h", y=-0.2), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, margin=dict(l=20, r=20, t=40, b=20))
 
-    # --- GRAFICO 2: Línea de Importes Acumulados por CER con selector de OC ---
+    # --- GRAFICO 2: Línea de Importes Acumulados por CER ---
     fig_linea = go.Figure()
-
     for idx, oc in enumerate(ocs):
         historial = oc.get("historial_cer", [])
         if historial:
             certs      = [h["certificado"] for h in historial]
             importes   = [limpiar_num(h["total_importe_acum"]) for h in historial]
             visible    = True if idx == 0 else "legendonly"
-
-            fig_linea.add_trace(go.Scatter(
-                x=certs,
-                y=importes,
-                mode="lines+markers+text",
-                name=oc["oc"],
-                visible=visible,
-                text=[f"${v:,.0f}" for v in importes],
-                textposition="top center",
-                hovertemplate="<b>%{x}</b><br>Importe Acum: $%{y:,.0f}<extra></extra>",
-                marker=dict(size=10),
-                line=dict(width=2)
-            ))
-
-    fig_linea.update_layout(
-        title="📈 Evolución de Importes Acumulados por Certificado",
-        xaxis_title="Certificado",
-        yaxis_title="Importe Acumulado ($)",
-        plot_bgcolor="white",
-        legend=dict(
-            title="OC — clic para mostrar/ocultar",
-            orientation="h",
-            y=-0.2
-        ),
-        height=400
-    )
+            fig_linea.add_trace(go.Scatter(x=certs, y=importes, mode="lines+markers+text", name=oc["oc"], visible=visible, text=[f"${v:,.0f}" for v in importes], textposition="top center", hovertemplate="<b>%{x}</b><br>Importe Acum: $%{y:,.0f}<extra></extra>", marker=dict(size=10), line=dict(width=2)))
+    fig_linea.update_layout(title="📈 Evolución de Importes Acumulados por Certificado", xaxis_title="Certificado", yaxis_title="Importe Acumulado ($)", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend=dict(title="OC — clic para mostrar/ocultar", orientation="h", y=-0.2), height=350, margin=dict(l=20, r=20, t=40, b=20))
 
     # --- GRAFICO 3: Avance Físico por Ítem ---
     html_fisico = ""
     for oc in ocs:
         if oc["items"]:
-            items     = oc["items"]
+            items = oc["items"]
             etiquetas = [f"Ítem {it['Item']}: {it['Denominacion'][:40]}" for it in items]
 
             fig_fis = go.Figure()
-            fig_fis.add_trace(go.Bar(
-                name="Anterior",
-                x=[it["Porcentaje_anterior"] for it in items], y=etiquetas,
-                orientation="h", marker_color="#95a5a6",
-                text=[f"{it['Porcentaje_anterior']:.1f}%" for it in items],
-                textposition="inside",
-                hovertemplate="<b>%{y}</b><br>Anterior: %{x:.1f}%<extra></extra>"
-            ))
-            fig_fis.add_trace(go.Bar(
-                name="En Mes",
-                x=[it["Porcentaje_en_mes"] for it in items], y=etiquetas,
-                orientation="h", marker_color="#3498db",
-                text=[f"{it['Porcentaje_en_mes']:.1f}%" for it in items],
-                textposition="inside",
-                hovertemplate="<b>%{y}</b><br>En Mes: %{x:.1f}%<extra></extra>"
-            ))
-            fig_fis.add_trace(go.Bar(
-                name="Acumulado",
-                x=[it["Porcentaje_Acumulado"] for it in items], y=etiquetas,
-                orientation="h", marker_color="#9b59b6",
-                text=[f"{it['Porcentaje_Acumulado']:.1f}%" for it in items],
-                textposition="inside",
-                hovertemplate="<b>%{y}</b><br>Acumulado: %{x:.1f}%<extra></extra>"
-            ))
-            fig_fis.update_layout(
-                title=f"🔧 Avance Físico (%) — OC: {oc['oc']} | {oc.get('certificado', '')}",
-                barmode="group",
-                xaxis=dict(title="% Avance", range=[0, 115]),
-                plot_bgcolor="white",
-                legend=dict(orientation="h", y=-0.15),
-                height=max(350, len(items) * 70)
-            )
+            fig_fis.add_trace(go.Bar(name="Anterior", x=[it["Porcentaje_anterior"] for it in items], y=etiquetas, orientation="h", marker_color="#cbd5e1", text=[f"{it['Porcentaje_anterior']:.1f}%" for it in items], textposition="inside", hovertemplate="<b>%{y}</b><br>Anterior: %{x:.1f}%<extra></extra>"))
+            fig_fis.add_trace(go.Bar(name="En Mes", x=[it["Porcentaje_en_mes"] for it in items], y=etiquetas, orientation="h", marker_color="#60a5fa", text=[f"{it['Porcentaje_en_mes']:.1f}%" for it in items], textposition="inside", hovertemplate="<b>%{y}</b><br>En Mes: %{x:.1f}%<extra></extra>"))
+            fig_fis.add_trace(go.Bar(name="Acumulado", x=[it["Porcentaje_Acumulado"] for it in items], y=etiquetas, orientation="h", marker_color="#818cf8", text=[f"{it['Porcentaje_Acumulado']:.1f}%" for it in items], textposition="inside", hovertemplate="<b>%{y}</b><br>Acumulado: %{x:.1f}%<extra></extra>"))
+            fig_fis.update_layout(title="", barmode="group", xaxis=dict(title="% Avance", range=[0, 115]), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", y=-0.15), height=max(350, len(items) * 50), margin=dict(l=10, r=10, t=10, b=10))
 
             # Tabla detallada de ítems
             filas_items = ""
             for it in items:
                 filas_items += f"""
-                <tr>
-                    <td><b>{it['Item']}</b></td>
-                    <td>{it['Denominacion']}</td>
-                    <td>{it['Unidad']}</td>
-                    <td>{limpiar_num(it['Cantidad']):,.2f}</td>
-                    <td>${limpiar_num(it['Precio_Unitario']):,.2f}</td>
-                    <td>${limpiar_num(it['Total']):,.2f}</td>
-                    <td>{limpiar_num(it['%Inc']):.2f}%</td>
-                    <td>{limpiar_num(it['Cantidad_Anterior']):,.2f}</td>
-                    <td>{limpiar_num(it['Cantidad_en_mes']):,.2f}</td>
-                    <td>{limpiar_num(it['Cantidad_acumulada']):,.2f}</td>
-                    <td>{limpiar_num(it['Porcentaje_anterior']):.1f}%</td>
-                    <td>{limpiar_num(it['Porcentaje_en_mes']):.1f}%</td>
-                    <td><b>{limpiar_num(it['Porcentaje_Acumulado']):.1f}%</b></td>
-                    <td>${limpiar_num(it['Importe_anterior']):,.2f}</td>
-                    <td>${limpiar_num(it['Importe_en_mes']):,.2f}</td>
-                    <td><b>${limpiar_num(it['Importe_Acumulado']):,.2f}</b></td>
+                <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td class="p-3 font-bold text-slate-400">{it['Item']}</td>
+                    <td class="p-3 font-medium max-w-[250px] truncate" title="{it['Denominacion']}">{it['Denominacion']}</td>
+                    <td class="p-3 text-center text-slate-500">{it['Unidad']}</td>
+                    <td class="p-3 text-right">{limpiar_num(it['Cantidad']):,.2f}</td>
+                    <td class="p-3 text-right text-slate-500">${limpiar_num(it['Precio_Unitario']):,.2f}</td>
+                    <td class="p-3 text-right font-medium">${limpiar_num(it['Total']):,.2f}</td>
+                    <td class="p-3 text-right text-indigo-600 font-bold">{limpiar_num(it['%Inc']):.2f}%</td>
+                    <td class="p-3 text-right text-slate-400">{limpiar_num(it['Cantidad_Anterior']):,.2f}</td>
+                    <td class="p-3 text-right text-slate-500">{limpiar_num(it['Cantidad_en_mes']):,.2f}</td>
+                    <td class="p-3 text-right text-indigo-600 font-bold">{limpiar_num(it['Cantidad_acumulada']):,.2f}</td>
+                    <td class="p-3 text-right text-slate-400">{limpiar_num(it['Porcentaje_anterior']):.1f}%</td>
+                    <td class="p-3 text-right text-slate-500">{limpiar_num(it['Porcentaje_en_mes']):.1f}%</td>
+                    <td class="p-3 text-right bg-indigo-50 font-bold text-indigo-700">{limpiar_num(it['Porcentaje_Acumulado']):.1f}%</td>
+                    <td class="p-3 text-right text-slate-400">${limpiar_num(it['Importe_anterior']):,.2f}</td>
+                    <td class="p-3 text-right text-slate-500">${limpiar_num(it['Importe_en_mes']):,.2f}</td>
+                    <td class="p-3 text-right font-bold text-slate-700">${limpiar_num(it['Importe_Acumulado']):,.2f}</td>
                 </tr>
                 """
 
-            tabla_items = f"""
-            <div style="overflow-x:auto; margin-top:20px">
-                <table>
-                    <thead>
-                        <tr style="background:#6c3483;color:white">
-                            <th>#</th><th>Denominación</th><th>Und</th><th>Cantidad</th>
-                            <th>P. Unitario</th><th>Total</th><th>% Inc</th>
-                            <th>Cant. Ant</th><th>Cant. Mes</th><th>Cant. Acum</th>
-                            <th>% Ant</th><th>% Mes</th><th>% Acum</th>
-                            <th>Imp. Ant</th><th>Imp. Mes</th><th>Imp. Acum</th>
-                        </tr>
-                    </thead>
-                    <tbody>{filas_items}</tbody>
-                </table>
-            </div>
-            """
-
             html_fisico += f"""
-            <div class="tarjeta">
-                {fig_to_html(fig_fis)}
-                <h3 style="margin-top:25px;color:#6c3483">📊 Detalle por Ítem</h3>
-                {tabla_items}
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
+                <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+                    <h5 class="font-bold text-slate-800 flex items-center gap-2 text-lg">
+                        <i data-lucide="wrench" class="w-6 h-6 text-orange-500"></i>
+                        Avance Físico Detallado: OC {oc['oc']}
+                    </h5>
+                    <span class="text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg uppercase tracking-widest">Certificado: {oc.get('certificado','')}</span>
+                </div>
+                <div class="mb-6">{fig_to_html(fig_fis)}</div>
+                
+                <h6 class="text-sm font-bold text-slate-500 uppercase mb-3 flex items-center gap-2"><i data-lucide="table-2" class="w-4 h-4"></i> Tabla de Ítems</h6>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white custom-scroll shadow-sm">
+                    <table class="w-full text-left text-xs whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200 tracking-wider">
+                            <tr>
+                                <th class="p-4">#</th><th class="p-4">Denominación</th><th class="p-4 text-center">Und</th>
+                                <th class="p-4 text-right">Cant. Total</th><th class="p-4 text-right">P. Unit</th>
+                                <th class="p-4 text-right">Total $</th><th class="p-4 text-right">% Incidencia</th>
+                                <th class="p-4 text-right">Cant. Ant</th><th class="p-4 text-right">Cant. Mes</th><th class="p-4 text-right">Cant. Acum</th>
+                                <th class="p-4 text-right">% Ant</th><th class="p-4 text-right">% Mes</th><th class="p-4 text-right">% Acum</th>
+                                <th class="p-4 text-right">Imp. Ant</th><th class="p-4 text-right">Imp. Mes</th><th class="p-4 text-right">Imp. Acum</th>
+                            </tr>
+                        </thead>
+                        <tbody>{filas_items}</tbody>
+                    </table>
+                </div>
             </div>
             """
 
     if not html_fisico:
-        html_fisico = '<div class="tarjeta"><p style="color:gray;text-align:center">Sin certificado completo disponible aún.</p></div>'
+        html_fisico = '<div class="bg-white p-8 rounded-2xl border-2 border-dashed border-slate-200 text-center text-slate-400 font-medium"><i data-lucide="info" class="w-8 h-8 mx-auto mb-3 opacity-50"></i> Sin certificados completos disponibles aún para esta obra.</div>'
 
     # --- TABLA DE OCs CON DESPLEGABLE DE HISTORIAL ---
     filas_tabla = ""
-    for i, oc in enumerate(ocs):
+    for i_oc, oc in enumerate(ocs):
         pct       = oc["porcentaje"] * 100
-        color_oc  = color_estado(oc["estado"])
-        link      = f'<a href="{oc["link_certificado"]}" target="_blank">📄 Ver</a>' if oc.get("link_certificado") else "-"
         estado_texto = oc["estado"] if oc["estado"] else "Sin estado"
+        color_clase  = tailwind_estado(estado_texto)
 
-        # Historial CER desplegable
         historial = oc.get("historial_cer", [])
         if historial:
             filas_hist = ""
             for cer in historial:
-                link_cer_html = f'<a href="{cer["link_cer"]}" target="_blank">📄 CER</a>' if cer.get("link_cer") else "-"
-                link_in_html  = f'<a href="{cer["link_in"]}" target="_blank">📸 Fotos</a>' if cer.get("link_in") else "-"
+                link_cer = f'<a href="{cer["link_cer"]}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-semibold underline">📄 CER</a>' if cer.get("link_cer") else "-"
+                link_in  = f'<a href="{cer["link_in"]}" target="_blank" class="text-indigo-600 hover:text-indigo-800 font-semibold underline">📸 Fotos</a>' if cer.get("link_in") else "-"
                 filas_hist += f"""
-                <tr>
-                    <td>{cer['certificado']}</td>
-                    <td>${limpiar_num(cer['total_oc']):,.2f}</td>
-                    <td>{limpiar_num(cer['total_unidad_acum']):,.2f}</td>
-                    <td>{limpiar_num(cer['total_pct_acum']):.2f}%</td>
-                    <td>${limpiar_num(cer['total_importe_acum']):,.2f}</td>
-                    <td>{link_cer_html}</td>
-                    <td>{link_in_html}</td>
+                <tr class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td class="p-3 font-medium">{cer['certificado']}</td>
+                    <td class="p-3">${limpiar_num(cer['total_oc']):,.2f}</td>
+                    <td class="p-3">{limpiar_num(cer['total_unidad_acum']):,.2f}</td>
+                    <td class="p-3 font-bold">{limpiar_num(cer['total_pct_acum']):.2f}%</td>
+                    <td class="p-3 text-indigo-700 font-bold">${limpiar_num(cer['total_importe_acum']):,.2f}</td>
+                    <td class="p-3 text-center">{link_cer}</td>
+                    <td class="p-3 text-center">{link_in}</td>
                 </tr>
                 """
             desplegable = f"""
-            <tr id="hist_{i}" style="display:none; background:#f0f0f0">
-                <td colspan="9">
-                    <div style="padding:10px">
-                        <b>📋 Historial de Certificados — OC {oc['oc']}</b>
-                        <table style="margin-top:8px; width:auto">
-                            <thead>
-                                <tr style="background:#2c3e50;color:white">
-                                    <th>Certificado</th>
-                                    <th>Total OC</th>
-                                    <th>Unid. Acum</th>
-                                    <th>% Acum</th>
-                                    <th>Importe Acum</th>
-                                    <th>CER</th>
-                                    <th>Fotos IN</th>
-                                </tr>
-                            </thead>
-                            <tbody>{filas_hist}</tbody>
-                        </table>
+            <tr id="hist_{i_oc}" class="hidden bg-slate-50/80 border-b border-slate-200">
+                <td colspan="8" class="p-6">
+                    <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                        <h6 class="text-sm font-bold text-slate-600 uppercase mb-4 flex items-center gap-2"><i data-lucide="file-spreadsheet" class="w-5 h-5 text-indigo-500"></i> Historial de Certificados — OC {oc['oc']}</h6>
+                        <div class="overflow-x-auto rounded-lg border border-slate-100">
+                            <table class="w-full text-left text-xs whitespace-nowrap">
+                                <thead class="bg-slate-100 text-slate-500 uppercase font-bold tracking-wider">
+                                    <tr>
+                                        <th class="p-3">Certificado</th><th class="p-3">Total OC</th><th class="p-3">Unid. Acum</th>
+                                        <th class="p-3">% Acum</th><th class="p-3">Importe Acum</th><th class="p-3 text-center">CER</th><th class="p-3 text-center">Fotos IN</th>
+                                    </tr>
+                                </thead>
+                                <tbody>{filas_hist}</tbody>
+                            </table>
+                        </div>
                     </div>
                 </td>
             </tr>
             """
-            btn = f'<button onclick="toggleHist({i})" style="background:#2c3e50;color:white;border:none;padding:4px 10px;border-radius:6px;cursor:pointer">📋 Ver CERs</button>'
+            btn = f'<button onclick="toggleHist({i_oc})" class="px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-indigo-600 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"><i data-lucide="history" class="w-4 h-4"></i> Ver CERs</button>'
         else:
             desplegable = ""
             btn = "-"
 
         filas_tabla += f"""
-        <tr style="cursor:pointer">
-            <td>{oc['oc']}</td>
-            <td>{oc['proveedor']}</td>
-            <td>${limpiar_num(oc['comprometido']):,.0f}</td>
-            <td>${limpiar_num(oc['adjudicado']):,.0f}</td>
-            <td>${limpiar_num(oc['pagado']):,.0f}</td>
-            <td>{pct:.0f}%</td>
-            <td style="font-size:0.82em;max-width:250px">{estado_texto}</td>
-            <td>{oc.get('certificado') or '-'}</td>
-            <td>{btn}</td>
+        <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100">
+            <td class="p-4 font-mono font-bold text-sm text-slate-700">{oc['oc']}</td>
+            <td class="p-4 text-sm font-medium">{oc['proveedor']}</td>
+            <td class="p-4 text-right font-semibold">${limpiar_num(oc['comprometido']):,.0f}</td>
+            <td class="p-4 text-right font-semibold text-blue-600">${limpiar_num(oc['adjudicado']):,.0f}</td>
+            <td class="p-4 text-right font-semibold text-green-600">${limpiar_num(oc['pagado']):,.0f}</td>
+            <td class="p-4 text-center font-black">{pct:.0f}%</td>
+            <td class="p-4">
+                <span class="px-2.5 py-1.5 rounded-lg border text-[11px] font-bold inline-block max-w-[250px] whitespace-normal {color_clase}">{estado_texto}</span>
+            </td>
+            <td class="p-4 text-center">{btn}</td>
         </tr>
         {desplegable}
         """
 
-    # --- HTML FINAL ---
+    # --- HTML FINAL POR PROYECTO ---
     html = f"""
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>{nombre}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{nombre} - Tablero de Obras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
-        body {{ font-family: 'Segoe UI', sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #2c3e50; }}
-        h1 {{ text-align: center; font-size: 1.8em; margin-bottom: 5px; }}
-        .subtitulo {{ text-align: center; color: #7f8c8d; margin-bottom: 25px; }}
-        .tarjeta {{ background: white; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
-        .kpis {{ display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-bottom: 25px; }}
-        .kpi {{ background: white; border-radius: 12px; padding: 15px 25px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.08); min-width: 130px; }}
-        .kpi .numero {{ font-size: 1.8em; font-weight: bold; }}
-        .kpi .etiqueta {{ font-size: 0.85em; color: #7f8c8d; margin-top: 4px; }}
-        .badge {{ display:inline-block; padding: 5px 14px; border-radius: 20px; color: white; font-weight: bold; }}
-        table {{ width: 100%; border-collapse: collapse; font-size: 0.9em; }}
-        th {{ background: #2c3e50; color: white; padding: 10px; text-align: left; }}
-        td {{ padding: 9px 10px; border-bottom: 1px solid #ecf0f1; }}
-        tr:hover {{ background: #f9f9f9; }}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {{ font-family: 'Inter', sans-serif; }}
+        .custom-scroll::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+        .custom-scroll::-webkit-scrollbar-track {{ background: #f8fafc; }}
+        .custom-scroll::-webkit-scrollbar-thumb {{ background: #cbd5e1; border-radius: 10px; }}
+        .custom-scroll::-webkit-scrollbar-thumb:hover {{ background: #94a3b8; }}
     </style>
     <script>
         function toggleHist(i) {{
-            var row = document.getElementById('hist_' + i);
-            row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+            const row = document.getElementById('hist_' + i);
+            if(row.classList.contains('hidden')) {{
+                row.classList.remove('hidden');
+            }} else {{
+                row.classList.add('hidden');
+            }}
         }}
     </script>
 </head>
-<body>
+<body class="bg-slate-50 min-h-screen text-slate-900 selection:bg-indigo-100">
 
-<h1>🏗️ {nombre}</h1>
-<p class="subtitulo">{cat}</p>
+    <div class="max-w-7xl mx-auto px-4 md:px-8 py-10">
+        
+        <header class="mb-10 text-center">
+            <div class="inline-flex items-center justify-center p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200 mb-4">
+                <i data-lucide="hard-hat" class="text-white w-8 h-8"></i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-800 mb-2">{nombre}</h1>
+            <div class="inline-flex items-center gap-2 bg-slate-200/60 text-slate-600 px-4 py-1.5 rounded-full text-sm font-bold tracking-wider">
+                <i data-lucide="tag" class="w-4 h-4"></i> {cat}
+            </div>
+        </header>
 
-<div class="kpis">
-    <div class="kpi">
-        <div class="numero">${presup/1_000_000:.1f}M</div>
-        <div class="etiqueta">Presupuesto</div>
-    </div>
-    <div class="kpi">
-        <div class="numero">${adj_total/1_000_000:.1f}M</div>
-        <div class="etiqueta">Adjudicado</div>
-    </div>
-    <div class="kpi">
-        <div class="numero">${pago_total/1_000_000:.1f}M</div>
-        <div class="etiqueta">Pagado</div>
-    </div>
-    <div class="kpi">
-        <div class="numero">{pct_fin:.0f}%</div>
-        <div class="etiqueta">Avance Financiero</div>
-    </div>
-    <div class="kpi">
-        <div class="numero"><span class="badge" style="background:{color}">{estado}</span></div>
-        <div class="etiqueta">Estado General</div>
-    </div>
-    <div class="kpi">
-        <div class="numero" style="font-size:1.1em">{fecha_inicio}</div>
-        <div class="etiqueta">Fecha Inicio</div>
-    </div>
-    <div class="kpi">
-        <div class="numero" style="font-size:1.1em">{fecha_fin}</div>
-        <div class="etiqueta">Fin Estimado</div>
-    </div>
-</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-10">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-2 lg:col-span-1">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Presupuesto</div>
+                <div class="text-xl font-black text-slate-800">${presup/1_000_000:.1f}M</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-2 lg:col-span-1 border-b-4 border-b-blue-500">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Adjudicado</div>
+                <div class="text-xl font-black text-blue-600">${adj_total/1_000_000:.1f}M</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-2 lg:col-span-1 border-b-4 border-b-green-500">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pagado</div>
+                <div class="text-xl font-black text-green-600">${pago_total/1_000_000:.1f}M</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-2 lg:col-span-1">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Avance Financiero</div>
+                <div class="text-xl font-black text-indigo-600">{pct_fin:.0f}%</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-2 md:col-span-4 lg:col-span-1">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Estado General</div>
+                <span class="px-2.5 py-1 rounded-md text-xs font-bold border {estado_clase}">{estado}</span>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-1">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Fecha Inicio</div>
+                <div class="text-sm font-bold text-slate-700 mt-1 flex items-center gap-1.5"><i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i> {fecha_inicio}</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm col-span-1">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Fin Estimado</div>
+                <div class="text-sm font-bold text-slate-700 mt-1 flex items-center gap-1.5"><i data-lucide="calendar-check" class="w-4 h-4 text-slate-400"></i> {fecha_fin}</div>
+            </div>
+        </div>
 
-<div class="tarjeta">
-    {fig_to_html(fig_linea)}
-</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-indigo-500"></i> Evolución de Certificados</h2>
+                {fig_to_html(fig_linea)}
+            </div>
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-5 h-5 text-indigo-500"></i> Balance por Orden de Compra</h2>
+                {fig_to_html(fig_fin)}
+            </div>
+        </div>
 
-<div class="tarjeta">
-    {fig_to_html(fig_fin)}
-</div>
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-10">
+            <h2 class="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-indigo-500"></i> Detalle de Órdenes de Compra</h2>
+            <div class="overflow-x-auto rounded-xl border border-slate-200 custom-scroll">
+                <table class="w-full text-left text-sm border-collapse">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                        <tr>
+                            <th class="p-4">OC</th><th class="p-4">Proveedor</th><th class="p-4 text-right">Comprometido</th>
+                            <th class="p-4 text-right">Adjudicado</th><th class="p-4 text-right">Pagado</th><th class="p-4 text-center">% Fin</th>
+                            <th class="p-4">Estado</th><th class="p-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>{filas_tabla}</tbody>
+                </table>
+            </div>
+        </div>
 
-<div class="tarjeta">
-    <h2 style="margin-top:0">📋 Detalle de Órdenes de Compra</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>OC</th><th>Proveedor</th><th>Comprometido</th>
-                <th>Adjudicado</th><th>Pagado</th><th>%</th>
-                <th>Estado</th><th>Certificado</th><th>Historial</th>
-            </tr>
-        </thead>
-        <tbody>{filas_tabla}</tbody>
-    </table>
-</div>
+        <div class="mb-4">
+            <h2 class="text-2xl font-extrabold text-slate-800 flex items-center gap-3">
+                <div class="bg-orange-100 p-2 rounded-lg"><i data-lucide="activity" class="w-6 h-6 text-orange-600"></i></div> 
+                Avance Físico de la Obra
+            </h2>
+        </div>
+        
+        {html_fisico}
 
-<div class="tarjeta">
-    <h2 style="margin-top:0">🔧 Avance Físico por Certificado</h2>
-</div>
-{html_fisico}
+    </div>
 
+    <script>
+        lucide.createIcons();
+    </script>
 </body>
 </html>
 """
@@ -406,4 +356,4 @@ for proyecto in tablero:
     archivos_generados.append(ruta)
     print(f"✅ {nombre} → {ruta}")
 
-print(f"\n📁 {len(archivos_generados)} dashboard(s) generado(s) en /dashboards")
+print(f"\n📁 {len(archivos_generados)} dashboard(s) HTML individual(es) generado(s) en /dashboards")
