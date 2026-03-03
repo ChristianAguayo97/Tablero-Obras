@@ -1,5 +1,6 @@
 import json
 import plotly.graph_objects as go
+from collections import defaultdict
 import plotly.io as pio
 import os
 
@@ -356,4 +357,86 @@ for proyecto in tablero:
     archivos_generados.append(ruta)
     print(f"✅ {nombre} → {ruta}")
 
-print(f"\n📁 {len(archivos_generados)} dashboard(s) HTML individual(es) generado(s) en /dashboards")
+# =============================================
+# GENERAMOS EL INDEX.HTML (menú principal)
+# =============================================
+
+proyectos_por_cat = defaultdict(list)
+for proyecto, ruta in zip(tablero, archivos_generados):
+    proyectos_por_cat[proyecto["cat_programatica"]].append((proyecto, ruta))
+
+cards_html = ""
+for cat, items in sorted(proyectos_por_cat.items()):
+    cards_html += f"""
+    <div class="mb-10">
+        <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <i data-lucide="folder" class="w-4 h-4"></i> {cat}
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    """
+    for proyecto, ruta in items:
+        ocs       = proyecto["ocs"]
+        estado    = clasificar_estado(ocs)
+        estado_clase = tailwind_estado(estado)
+        adj_total = sum(oc["adjudicado"] for oc in ocs)
+        pago_total= sum(oc["pagado"] for oc in ocs)
+        pct_fin   = (pago_total / adj_total * 100) if adj_total > 0 else 0
+        nombre_p  = proyecto["nombre_proyecto"]
+        # ruta relativa desde index.html (mismo directorio dashboards/)
+        href      = os.path.basename(ruta)
+
+        cards_html += f"""
+        <a href="{href}" class="group block bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="font-bold text-slate-800 text-sm leading-snug group-hover:text-indigo-600 transition-colors">{nombre_p}</h3>
+                <span class="ml-2 shrink-0 px-2 py-1 rounded-md text-[10px] font-bold border {estado_clase}">{estado}</span>
+            </div>
+            <div class="flex items-center gap-1 mb-3">
+                <div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div class="bg-indigo-500 h-2 rounded-full" style="width:{min(pct_fin,100):.0f}%"></div>
+                </div>
+                <span class="text-xs font-black text-indigo-600 ml-2">{pct_fin:.0f}%</span>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400 font-medium">
+                <span>Adj: <span class="text-slate-600 font-bold">${adj_total/1_000_000:.1f}M</span></span>
+                <span>Pag: <span class="text-green-600 font-bold">${pago_total/1_000_000:.1f}M</span></span>
+                <span>{len(ocs)} OC{'s' if len(ocs)>1 else ''}</span>
+            </div>
+        </a>
+        """
+    cards_html += "</div></div>"
+
+index_html = f"""
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablero de Obras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {{ font-family: 'Inter', sans-serif; }}
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-900">
+    <div class="max-w-6xl mx-auto px-4 md:px-8 py-10">
+        <header class="mb-10 text-center">
+            <div class="inline-flex items-center justify-center p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-200 mb-4">
+                <i data-lucide="hard-hat" class="text-white w-8 h-8"></i>
+            </div>
+            <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-800 mb-2">Tablero de Obras</h1>
+            <p class="text-slate-400 text-sm">{len(tablero)} proyecto(s) — hacé clic en una tarjeta para ver el detalle</p>
+        </header>
+        {cards_html}
+    </div>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
+"""
+
+with open("dashboards/index.html", "w", encoding="utf-8") as f:
+    f.write(index_html)
+
+print("🏠 index.html generado → dashboards/index.html")
