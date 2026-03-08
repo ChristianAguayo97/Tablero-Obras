@@ -39,7 +39,7 @@ jobs:
             cache-certificados-
 
       - name: Poblar caché de certificados
-        run: python poblar_cache.py
+        run: python poblar_cache.py --forzar
 
       - name: Construir tablero
         run: python construir_tablero.py
