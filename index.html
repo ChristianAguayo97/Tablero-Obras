@@ -1,378 +1,372 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Tablero de Obras — San Miguel</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <style>body{margin:0;padding:0;font-family:'DM Sans',sans-serif}#root{min-height:100vh}</style>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; padding:0; background:#f1f5f9; font-family:'DM Sans',sans-serif; }
+    #root { min-height:100vh; }
+    .bar-hover:hover .bar-tooltip { opacity:1; transform:translateY(0); }
+    .bar-tooltip { opacity:0; transform:translateY(4px); transition:all 0.2s; pointer-events:none; }
+  </style>
 </head>
 <body>
-  <div id="root"></div>
+<div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect } = React;
-const { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } = Recharts;
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-const fmt = (n) => new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(n);
-const fmtM = (n) => `$${(n / 1_000_000).toFixed(1)}M`;
-const limpiarNum = (v) => { if (typeof v === "number") return v; return parseFloat(String(v).replace(/[$,%]/g, "").replace(",", ".")) || 0; };
-const driveThumb = (link) => { const m = link?.match(/\/file\/d\/([^/]+)/); return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w800` : link; };
-const estadoColor = (e = "") => {
-  const s = e.toLowerCase();
-  if (s.includes("finalizado")) return { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200", dot: "bg-emerald-500" };
-  if (s.includes("ejecución") || s.includes("ejecucion")) return { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200", dot: "bg-amber-500" };
-  return { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-200", dot: "bg-slate-400" };
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = n => new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n);
+const fmtM = n => `$${(n/1_000_000).toFixed(1)}M`;
+const num = v => { if(typeof v==='number') return v; return parseFloat(String(v).replace(/[$,%]/g,'').replace(',','.'))||0; };
+const thumb = link => { const m=link?.match(/\/file\/d\/([^/]+)/); return m?`https://drive.google.com/thumbnail?id=${m[1]}&sz=w800`:link; };
+
+const estadoColor = e => {
+  const s=(e||'').toLowerCase();
+  if(s.includes('finalizado')) return {bg:'#d1fae5',text:'#065f46',dot:'#10b981'};
+  if(s.includes('ejecuci')) return {bg:'#fef3c7',text:'#92400e',dot:'#f59e0b'};
+  return {bg:'#f1f5f9',text:'#475569',dot:'#94a3b8'};
 };
-const proyectoEstado = (ocs) => {
-  const porcs = ocs.filter(o => o.adjudicado > 0).map(o => o.porcentaje);
-  if (!porcs.length) return "En Gestión";
-  const avg = porcs.reduce((a, b) => a + b, 0) / porcs.length;
-  if (avg >= 1) return "Finalizado";
-  if (avg > 0) return "En Ejecución";
-  return "En Gestión";
+const proyEstado = ocs => {
+  const pp=ocs.filter(o=>o.adjudicado>0).map(o=>o.porcentaje);
+  if(!pp.length) return 'En Gestión';
+  const avg=pp.reduce((a,b)=>a+b,0)/pp.length;
+  if(avg>=1) return 'Finalizado';
+  if(avg>0) return 'En Ejecución';
+  return 'En Gestión';
 };
 
-// ─── Tooltip gráfico ─────────────────────────────────────────────────────────
-function CustomTooltip({ active, payload, label }) {
-  if (active && payload?.length) {
-    return (
-      <div className="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm">
-        <p className="font-bold mb-1">{label}</p>
-        <p className="text-sky-400 font-black">{fmt(payload[0].value)}</p>
-      </div>
-    );
-  }
-  return null;
+// ── Íconos SVG ────────────────────────────────────────────────────────────────
+const Ico = ({d,size=18,stroke=2}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>;
+const IcoHat = ({size=20}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2H2v2z"/><path d="M20 15a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1h16v-1z"/><path d="M12 2a7 7 0 0 0-7 7v1h14V9a7 7 0 0 0-7-7z"/></svg>;
+const IcoBack = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>;
+const IcoExt = ({size=14}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+const IcoCam = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+const IcoChev = ({open}) => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{transform:open?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>;
+
+// ── Gráfico de barras CSS puro ────────────────────────────────────────────────
+function BarChart({data}) {
+  if(!data||!data.length) return null;
+  const max = Math.max(...data.map(d=>d.monto));
+  return (
+    <div style={{display:'flex',alignItems:'flex-end',gap:'8px',height:'180px',padding:'8px 0 24px'}}>
+      {data.map((d,i) => {
+        const h = Math.max((d.monto/max)*100,3);
+        const isLast = i===data.length-1;
+        return (
+          <div key={i} className="bar-hover" style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',height:'100%',justifyContent:'flex-end',position:'relative'}}>
+            <div className="bar-tooltip" style={{position:'absolute',bottom:'100%',marginBottom:'6px',background:'#1e293b',color:'white',padding:'6px 10px',borderRadius:'8px',fontSize:'11px',fontWeight:700,whiteSpace:'nowrap',zIndex:10}}>
+              <div style={{color:'#94a3b8',marginBottom:'2px'}}>{d.name}</div>
+              <div style={{color:'#38bdf8'}}>{fmt(d.monto)}</div>
+              <div style={{position:'absolute',top:'100%',left:'50%',transform:'translateX(-50%)',borderLeft:'5px solid transparent',borderRight:'5px solid transparent',borderTop:'5px solid #1e293b'}}></div>
+            </div>
+            <div style={{width:'100%',height:`${h}%`,background:isLast?'#0ea5e9':'#7dd3fc',borderRadius:'6px 6px 0 0',transition:'background 0.2s'}}></div>
+            <div style={{marginTop:'6px',fontSize:'10px',fontWeight:700,color:'#64748b',textAlign:'center'}}>{d.name}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-// ─── Íconos SVG inline ───────────────────────────────────────────────────────
-const IconHardHat = () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2H2v2z"/><path d="M20 15a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v1h16v-1z"/><path d="M12 2a7 7 0 0 0-7 7v1h14V9a7 7 0 0 0-7-7z"/></svg>;
-const IconArrowLeft = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>;
-const IconBuilding = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>;
-const IconCalendar = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
-const IconTrending = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
-const IconActivity = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
-const IconFile = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>;
-const IconCamera = () => <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
-const IconExternal = () => <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
-const IconChevron = ({ open }) => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform 0.2s'}}><polyline points="6 9 12 15 18 9"/></svg>;
-const IconDollar = () => <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>;
-
-// ─── Header compartido ────────────────────────────────────────────────────────
-function Header({ onBack, titulo, estado }) {
+// ── Header ────────────────────────────────────────────────────────────────────
+function Header({onBack,titulo,estado}) {
   const col = estado ? estadoColor(estado) : null;
   return (
-    <header style={{background:"#0c2a3a"}} className="text-white shadow-lg sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
+    <header style={{background:'#0c2a3a',color:'white',position:'sticky',top:0,zIndex:40,boxShadow:'0 2px 8px rgba(0,0,0,0.2)'}}>
+      <div style={{maxWidth:'1200px',margin:'0 auto',padding:'14px 24px',display:'flex',alignItems:'center',gap:'12px'}}>
         {onBack && (
-          <button onClick={onBack} className="p-2 hover:bg-sky-800 rounded-xl transition-colors">
-            <IconArrowLeft />
+          <button onClick={onBack} style={{background:'none',border:'none',color:'white',cursor:'pointer',padding:'6px',borderRadius:'10px',display:'flex',alignItems:'center'}} onMouseOver={e=>e.currentTarget.style.background='rgba(14,165,233,0.2)'} onMouseOut={e=>e.currentTarget.style.background='none'}>
+            <IcoBack/>
           </button>
         )}
-        <div className="bg-sky-500 p-2 rounded-xl"><IconHardHat /></div>
+        <div style={{background:'#0ea5e9',padding:'8px',borderRadius:'10px',display:'flex'}}><IcoHat/></div>
         <div>
-          <p className="text-xs font-semibold text-sky-300 uppercase tracking-widest">Municipalidad de San Miguel</p>
-          <h1 className="text-sm font-bold leading-tight">
-            {titulo || "Secretaría de Obras y Espacios Públicos"}
-          </h1>
+          <div style={{fontSize:'10px',fontWeight:700,color:'#7dd3fc',letterSpacing:'0.1em',textTransform:'uppercase'}}>Municipalidad de San Miguel</div>
+          <div style={{fontSize:'14px',fontWeight:700,lineHeight:1.3}}>{titulo||'Secretaría de Obras y Espacios Públicos'}</div>
         </div>
         {col && estado && (
-          <span className={`ml-auto text-xs font-bold px-3 py-1.5 rounded-full border ${col.bg} ${col.text} ${col.border} flex items-center gap-1.5`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`}></span>{estado}
-          </span>
+          <div style={{marginLeft:'auto',background:col.bg,color:col.text,border:`1px solid ${col.dot}40`,padding:'5px 12px',borderRadius:'999px',fontSize:'11px',fontWeight:700,display:'flex',alignItems:'center',gap:'6px'}}>
+            <span style={{width:'6px',height:'6px',borderRadius:'50%',background:col.dot,display:'inline-block'}}></span>{estado}
+          </div>
         )}
         {!onBack && (
-          <span className="ml-auto hidden md:block text-xs font-semibold bg-sky-900/60 border border-sky-700/40 px-4 py-2 rounded-full">
+          <div style={{marginLeft:'auto',background:'rgba(14,165,233,0.1)',border:'1px solid rgba(14,165,233,0.2)',padding:'6px 16px',borderRadius:'999px',fontSize:'11px',fontWeight:600}}>
             Tablero de Control Abierto
-          </span>
+          </div>
         )}
       </div>
     </header>
   );
 }
 
-// ─── Footer compartido ────────────────────────────────────────────────────────
+// ── Footer ────────────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer style={{background:"#0c2a3a"}} className="text-slate-400 py-8 mt-12">
-      <div className="max-w-7xl mx-auto px-6 text-center">
-        <p className="font-bold text-white mb-1">Secretaría de Obras y Espacios Públicos — San Miguel</p>
-        <p className="text-xs" style={{color:"#164e63"}}>Datos extraídos automáticamente de Actas de Medición y Certificados oficiales. Acceso público irrestricto.</p>
-      </div>
+    <footer style={{background:'#0c2a3a',color:'#64748b',padding:'32px 24px',marginTop:'48px',textAlign:'center'}}>
+      <div style={{fontWeight:700,color:'white',marginBottom:'6px'}}>Secretaría de Obras y Espacios Públicos — San Miguel</div>
+      <div style={{fontSize:'12px',color:'#164e63'}}>Datos extraídos automáticamente de Actas de Medición y Certificados oficiales. Acceso público irrestricto.</div>
     </footer>
   );
 }
 
-// ─── Vista índice ─────────────────────────────────────────────────────────────
-function IndexView({ tablero, onSelect }) {
+// ── Tarjeta KPI ───────────────────────────────────────────────────────────────
+function KPI({label,value,accent}) {
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Header />
-      <main className="max-w-7xl mx-auto px-6 py-10">
-        <div className="mb-8">
-          <h2 className="text-3xl font-extrabold text-slate-800 mb-1">Obras en curso</h2>
-          <p className="text-slate-500 text-sm">{tablero.length} proyecto(s) — hacé clic para ver el detalle</p>
+    <div style={{background:'white',borderRadius:'16px',border:'1px solid #e2e8f0',borderBottom:`4px solid ${accent}`,padding:'20px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+      <div style={{fontSize:'10px',fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'6px'}}>{label}</div>
+      <div style={{fontSize:'22px',fontWeight:800,color:'#0f172a'}}>{value}</div>
+    </div>
+  );
+}
+
+// ── Vista Índice ──────────────────────────────────────────────────────────────
+function IndexView({tablero,onSelect}) {
+  return (
+    <div style={{minHeight:'100vh'}}>
+      <Header/>
+      <div style={{maxWidth:'1200px',margin:'0 auto',padding:'40px 24px'}}>
+        <div style={{marginBottom:'32px'}}>
+          <h2 style={{fontSize:'28px',fontWeight:800,color:'#0f172a',margin:'0 0 4px'}}>Obras en curso</h2>
+          <p style={{color:'#64748b',fontSize:'14px',margin:0}}>{tablero.length} proyecto(s) — hacé clic para ver el detalle</p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {tablero.map((proyecto) => {
-            const estado = proyectoEstado(proyecto.ocs);
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'20px'}}>
+          {tablero.map(proy => {
+            const estado = proyEstado(proy.ocs);
             const col = estadoColor(estado);
-            const adjTotal = proyecto.ocs.reduce((s, o) => s + o.adjudicado, 0);
-            const pagTotal = proyecto.ocs.reduce((s, o) => s + o.pagado, 0);
-            const pct = adjTotal > 0 ? (pagTotal / adjTotal) * 100 : 0;
-            const presup = limpiarNum(proyecto.presupuesto);
+            const adj = proy.ocs.reduce((s,o)=>s+o.adjudicado,0);
+            const pag = proy.ocs.reduce((s,o)=>s+o.pagado,0);
+            const pct = adj>0?(pag/adj)*100:0;
+            const presup = num(proy.presupuesto);
             return (
-              <button key={proyecto.cat_programatica} onClick={() => onSelect(proyecto)}
-                className="text-left bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md hover:border-sky-300 transition-all group">
-                <div className="flex justify-between items-start mb-4">
-                  <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md font-mono">{proyecto.cat_programatica}</span>
-                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${col.bg} ${col.text} ${col.border} flex items-center gap-1.5`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${col.dot}`}></span>{estado}
+              <button key={proy.cat_programatica} onClick={()=>onSelect(proy)}
+                style={{textAlign:'left',background:'white',borderRadius:'20px',border:'1px solid #e2e8f0',padding:'24px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',cursor:'pointer',transition:'all 0.2s',width:'100%'}}
+                onMouseOver={e=>{e.currentTarget.style.boxShadow='0 8px 24px rgba(14,165,233,0.12)';e.currentTarget.style.borderColor='#7dd3fc';}}
+                onMouseOut={e=>{e.currentTarget.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)';e.currentTarget.style.borderColor='#e2e8f0';}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px',alignItems:'flex-start'}}>
+                  <span style={{fontFamily:'DM Mono,monospace',fontSize:'11px',fontWeight:700,background:'#f8fafc',border:'1px solid #e2e8f0',color:'#64748b',padding:'3px 8px',borderRadius:'6px'}}>{proy.cat_programatica}</span>
+                  <span style={{background:col.bg,color:col.text,border:`1px solid ${col.dot}40`,padding:'3px 10px',borderRadius:'999px',fontSize:'11px',fontWeight:700,display:'flex',alignItems:'center',gap:'5px'}}>
+                    <span style={{width:'6px',height:'6px',borderRadius:'50%',background:col.dot}}></span>{estado}
                   </span>
                 </div>
-                <h3 className="font-bold text-slate-800 text-base mb-4 group-hover:text-sky-700 transition-colors leading-snug">{proyecto.nombre_proyecto}</h3>
-                <div className="mb-3">
-                  <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'16px',lineHeight:1.4}}>{proy.nombre_proyecto}</div>
+                <div style={{marginBottom:'12px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:'11px',color:'#94a3b8',marginBottom:'6px'}}>
                     <span>Avance financiero</span>
-                    <span className="font-bold text-sky-600">{pct.toFixed(0)}%</span>
+                    <span style={{fontWeight:700,color:'#0ea5e9'}}>{pct.toFixed(0)}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div className="bg-sky-500 h-2 rounded-full" style={{width:`${Math.min(pct,100)}%`}}></div>
+                  <div style={{background:'#f1f5f9',borderRadius:'999px',height:'6px',overflow:'hidden'}}>
+                    <div style={{background:'#0ea5e9',height:'100%',borderRadius:'999px',width:`${Math.min(pct,100)}%`,transition:'width 0.6s'}}></div>
                   </div>
                 </div>
-                <div className="flex justify-between text-xs text-slate-400 font-medium mt-3 pt-3 border-t border-slate-100">
-                  <span>Presupuesto: <span className="text-slate-600 font-bold">{fmtM(presup)}</span></span>
-                  <span>Pagado: <span className="text-sky-600 font-bold">{fmtM(pagTotal)}</span></span>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:'11px',color:'#94a3b8',borderTop:'1px solid #f1f5f9',paddingTop:'12px'}}>
+                  <span>Presupuesto: <b style={{color:'#475569'}}>{fmtM(presup)}</b></span>
+                  <span>Pagado: <b style={{color:'#0ea5e9'}}>{fmtM(pag)}</b></span>
                 </div>
               </button>
             );
           })}
         </div>
-      </main>
-      <Footer />
+      </div>
+      <Footer/>
     </div>
   );
 }
 
-// ─── Vista detalle proyecto ───────────────────────────────────────────────────
-function ProyectoView({ proyecto, onBack }) {
-  const [ocActiva, setOcActiva] = useState(0);
-  const [cerSeleccionado, setCerSeleccionado] = useState(null);
-  const [fotoAmpliada, setFotoAmpliada] = useState(null);
+// ── Vista Detalle ─────────────────────────────────────────────────────────────
+function DetalleView({proyecto,onBack}) {
+  const [ocIdx,setOcIdx] = useState(0);
+  const [cerActivo,setCerActivo] = useState(null);
+  const [fotoModal,setFotoModal] = useState(null);
 
-  const oc = proyecto.ocs[ocActiva];
-  const historial = oc.historial_cer || [];
-  const items = oc.items || [];
-  const adjTotal = proyecto.ocs.reduce((s, o) => s + o.adjudicado, 0);
-  const pagTotal = proyecto.ocs.reduce((s, o) => s + o.pagado, 0);
-  const pctFin = adjTotal > 0 ? (pagTotal / adjTotal) * 100 : 0;
-  const presup = limpiarNum(proyecto.presupuesto);
-  const estado = proyectoEstado(proyecto.ocs);
+  const oc = proyecto.ocs[ocIdx];
+  const historial = (oc.historial_cer||[]).filter(h=>h.total_importe_mes>0);
+  const items = oc.items||[];
+  const adj = proyecto.ocs.reduce((s,o)=>s+o.adjudicado,0);
+  const pag = proyecto.ocs.reduce((s,o)=>s+o.pagado,0);
+  const pctFin = adj>0?(pag/adj)*100:0;
+  const presup = num(proyecto.presupuesto);
+  const estado = proyEstado(proyecto.ocs);
+  const circum = 414.69;
 
-  const datosGrafico = historial
-    .filter(h => h.total_importe_mes > 0)
-    .map(h => ({ name: h.certificado, monto: h.total_importe_mes }));
+  const card = {background:'white',borderRadius:'20px',border:'1px solid #e2e8f0',padding:'24px',boxShadow:'0 1px 3px rgba(0,0,0,0.06)',marginBottom:'0'};
+  const labelSm = {fontSize:'10px',fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'4px'};
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Header onBack={onBack} titulo={proyecto.nombre_proyecto} estado={estado} />
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold font-mono bg-white border border-slate-200 text-slate-500 px-2.5 py-1 rounded-md">{proyecto.cat_programatica}</span>
-          </div>
-          <h2 className="text-4xl font-extrabold text-slate-900 mb-2 leading-tight">{proyecto.nombre_proyecto}</h2>
-          {oc.descripcion && <p className="text-slate-500 text-base max-w-3xl leading-relaxed">{oc.descripcion}</p>}
+    <div style={{minHeight:'100vh'}}>
+      <Header onBack={onBack} titulo={proyecto.nombre_proyecto} estado={estado}/>
+      <div style={{maxWidth:'1200px',margin:'0 auto',padding:'32px 24px'}}>
+
+        {/* Título */}
+        <div style={{marginBottom:'28px'}}>
+          <span style={{fontFamily:'DM Mono,monospace',fontSize:'11px',background:'white',border:'1px solid #e2e8f0',color:'#64748b',padding:'3px 8px',borderRadius:'6px',display:'inline-block',marginBottom:'10px'}}>{proyecto.cat_programatica}</span>
+          <h2 style={{fontSize:'32px',fontWeight:800,color:'#0f172a',margin:'0 0 8px',lineHeight:1.2}}>{proyecto.nombre_proyecto}</h2>
+          {oc.descripcion && <p style={{color:'#64748b',margin:0,fontSize:'15px'}}>{oc.descripcion}</p>}
         </div>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          {[
-            { label: "Presupuesto", value: fmtM(presup), accent: "border-slate-400" },
-            { label: "Adjudicado", value: fmtM(adjTotal), accent: "border-blue-400" },
-            { label: "Pagado", value: fmtM(pagTotal), accent: "border-sky-400" },
-            { label: "Avance Financiero", value: `${pctFin.toFixed(0)}%`, accent: "border-indigo-400" },
-          ].map(k => (
-            <div key={k.label} className={`bg-white rounded-2xl border border-slate-200 border-b-4 ${k.accent} p-5 shadow-sm`}>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">{k.label}</p>
-              <p className="text-2xl font-black text-slate-800">{k.value}</p>
-            </div>
-          ))}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:'12px',marginBottom:'24px'}}>
+          <KPI label="Presupuesto" value={fmtM(presup)} accent="#94a3b8"/>
+          <KPI label="Adjudicado" value={fmtM(adj)} accent="#3b82f6"/>
+          <KPI label="Pagado" value={fmtM(pag)} accent="#0ea5e9"/>
+          <KPI label="Avance Financiero" value={`${pctFin.toFixed(0)}%`} accent="#6366f1"/>
         </div>
 
         {/* Selector OC */}
-        {proyecto.ocs.length > 1 && (
-          <div className="flex gap-2 mb-6 flex-wrap">
-            {proyecto.ocs.map((o, i) => (
-              <button key={o.oc} onClick={() => { setOcActiva(i); setCerSeleccionado(null); }}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${ocActiva === i ? "bg-sky-600 text-white border-sky-600" : "bg-white text-slate-600 border-slate-200 hover:border-sky-300"}`}>
+        {proyecto.ocs.length>1 && (
+          <div style={{display:'flex',gap:'8px',marginBottom:'20px',flexWrap:'wrap'}}>
+            {proyecto.ocs.map((o,i)=>(
+              <button key={o.oc} onClick={()=>{setOcIdx(i);setCerActivo(null);}}
+                style={{padding:'8px 16px',borderRadius:'12px',border:`1px solid ${ocIdx===i?'#0ea5e9':'#e2e8f0'}`,background:ocIdx===i?'#0ea5e9':'white',color:ocIdx===i?'white':'#475569',fontWeight:700,fontSize:'13px',cursor:'pointer',fontFamily:'inherit'}}>
                 OC {o.oc}
               </button>
             ))}
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 space-y-6">
+        {/* Layout 2 columnas */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:'20px',alignItems:'start'}}>
+
+          {/* Columna principal */}
+          <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
 
             {/* Info OC */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <span className="text-sky-600"><IconBuilding /></span> Orden de Compra — {oc.oc}
-              </h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="bg-slate-50 rounded-xl p-4">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Proveedor</p>
-                  <p className="font-bold text-slate-800">{oc.proveedor || "—"}</p>
-                </div>
-                <div className="bg-slate-50 rounded-xl p-4">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Estado</p>
-                  <p className="font-semibold text-slate-700 text-xs leading-snug">{oc.estado}</p>
-                </div>
-                {oc.fecha_inicio && (
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Inicio</p>
-                    <p className="font-bold text-slate-800 flex items-center gap-1.5"><span className="text-sky-500"><IconCalendar /></span>{oc.fecha_inicio}</p>
+            <div style={card}>
+              <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'16px',paddingBottom:'12px',borderBottom:'1px solid #f1f5f9'}}>
+                Orden de Compra — {oc.oc}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                {[
+                  {label:'Proveedor',val:oc.proveedor||'—'},
+                  {label:'Estado',val:oc.estado},
+                  ...(oc.fecha_inicio?[{label:'Inicio',val:oc.fecha_inicio}]:[]),
+                  ...(oc.fecha_fin_estimada?[{label:'Fin estimado',val:oc.fecha_fin_estimada}]:[]),
+                ].map(f=>(
+                  <div key={f.label} style={{background:'#f8fafc',borderRadius:'12px',padding:'14px'}}>
+                    <div style={labelSm}>{f.label}</div>
+                    <div style={{fontWeight:600,color:'#1e293b',fontSize:'13px',lineHeight:1.4}}>{f.val}</div>
                   </div>
-                )}
-                {oc.fecha_fin_estimada && (
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Fin estimado</p>
-                    <p className="font-bold text-slate-800 flex items-center gap-1.5"><IconCalendar />{oc.fecha_fin_estimada}</p>
-                  </div>
-                )}
+                ))}
               </div>
               {oc.inspector && (
-                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-3">
-                  <div className="bg-sky-100 text-sky-700 p-2 rounded-lg"><IconHardHat /></div>
+                <div style={{marginTop:'16px',paddingTop:'14px',borderTop:'1px solid #f1f5f9',display:'flex',alignItems:'center',gap:'12px'}}>
+                  <div style={{background:'#e0f2fe',color:'#0369a1',padding:'8px',borderRadius:'10px',display:'flex'}}><IcoHat size={16}/></div>
                   <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inspector de obra</p>
-                    <p className="font-semibold text-slate-800">{oc.inspector}</p>
+                    <div style={labelSm}>Inspector de obra</div>
+                    <div style={{fontWeight:600,color:'#1e293b'}}>{oc.inspector}</div>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Gráfico */}
-            {datosGrafico.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
-                  <span className="text-sky-600"><IconTrending /></span> Importe ejecutado por certificado
-                </h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={datosGrafico} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="name" tick={{ fontSize: 11, fontWeight: 600, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={v => fmtM(v)} tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={60} />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f1f5f9" }} />
-                    <Bar dataKey="monto" radius={[6, 6, 0, 0]}>
-                      {datosGrafico.map((_, i) => (
-                        <Cell key={i} fill={i === datosGrafico.length - 1 ? "#0ea5e9" : "#38bdf8"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+            {historial.length>0 && (
+              <div style={card}>
+                <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'16px',paddingBottom:'12px',borderBottom:'1px solid #f1f5f9'}}>
+                  💰 Importe ejecutado por certificado
+                </div>
+                <BarChart data={historial.map(h=>({name:h.certificado,monto:h.total_importe_mes}))}/>
               </div>
             )}
 
             {/* Items */}
-            {items.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
-                  <span className="text-sky-600"><IconActivity /></span> Avance físico por ítem
-                  <span className="ml-auto text-xs font-mono text-slate-400">{oc.certificado}</span>
-                </h3>
-                <div className="space-y-4">
-                  {items.map((it) => (
-                    <div key={it.Item} className="group">
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="font-semibold text-slate-700">
-                          <span className="text-slate-400 font-mono mr-1.5">#{it.Item}</span>
-                          {it.Denominacion}
-                        </span>
-                        <span className="font-black text-sky-600 ml-4">{limpiarNum(it.Porcentaje_Acumulado).toFixed(0)}%</span>
+            {items.length>0 && (
+              <div style={card}>
+                <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'20px',paddingBottom:'12px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>📊 Avance físico por ítem</span>
+                  <span style={{fontFamily:'DM Mono,monospace',fontSize:'11px',color:'#94a3b8'}}>{oc.certificado}</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
+                  {items.map(it => {
+                    const acum = num(it.Porcentaje_Acumulado);
+                    const ant = num(it.Porcentaje_anterior);
+                    return (
+                      <div key={it.Item}>
+                        <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',marginBottom:'6px'}}>
+                          <span style={{color:'#475569',fontWeight:600}}>
+                            <span style={{fontFamily:'DM Mono,monospace',color:'#94a3b8',marginRight:'6px'}}>#{it.Item}</span>
+                            {it.Denominacion}
+                          </span>
+                          <span style={{fontWeight:800,color:'#0ea5e9',marginLeft:'12px',whiteSpace:'nowrap'}}>{acum.toFixed(0)}%</span>
+                        </div>
+                        <div style={{position:'relative',height:'10px',background:'#f1f5f9',borderRadius:'999px',overflow:'hidden'}}>
+                          <div style={{position:'absolute',left:0,top:0,height:'100%',background:'#bfdbfe',borderRadius:'999px',width:`${ant}%`}}></div>
+                          <div style={{position:'absolute',left:0,top:0,height:'100%',background:acum>=100?'#0ea5e9':'#38bdf8',borderRadius:'999px',width:`${acum}%`}}></div>
+                        </div>
+                        <div style={{display:'flex',gap:'16px',marginTop:'4px',fontSize:'10px',color:'#94a3b8'}}>
+                          <span>Ant: {ant.toFixed(0)}%</span>
+                          <span>Mes: {num(it.Porcentaje_en_mes).toFixed(0)}%</span>
+                          <span>Acum: <b style={{color:'#0ea5e9'}}>{acum.toFixed(0)}%</b></span>
+                        </div>
                       </div>
-                      <div className="relative h-3 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="absolute left-0 top-0 h-full bg-slate-300/70 rounded-full"
-                          style={{width:`${limpiarNum(it.Porcentaje_anterior)}%`}}></div>
-                        <div className="absolute left-0 top-0 h-full rounded-full"
-                          style={{width:`${limpiarNum(it.Porcentaje_Acumulado)}%`, background: limpiarNum(it.Porcentaje_Acumulado) >= 100 ? "#0ea5e9" : "#38bdf8"}}></div>
-                      </div>
-                      <div className="flex gap-4 mt-1 text-xs text-slate-400">
-                        <span>Ant: {limpiarNum(it.Porcentaje_anterior).toFixed(0)}%</span>
-                        <span>Mes: {limpiarNum(it.Porcentaje_en_mes).toFixed(0)}%</span>
-                        <span>Acum: <b className="text-sky-500">{limpiarNum(it.Porcentaje_Acumulado).toFixed(0)}%</b></span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {/* Historial certificados */}
-            {historial.length > 0 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
-                  <span className="text-sky-600"><IconFile /></span> Historial de certificados
-                </h3>
-                <div className="space-y-2">
-                  {historial.map((cer) => {
-                    const isActive = cerSeleccionado === cer.certificado;
+            {(oc.historial_cer||[]).length>0 && (
+              <div style={card}>
+                <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'16px',paddingBottom:'12px',borderBottom:'1px solid #f1f5f9'}}>
+                  📋 Historial de certificados
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  {oc.historial_cer.map(cer => {
+                    const isOpen = cerActivo===cer.certificado;
+                    const fotos = cer.fotos||[];
                     return (
-                      <div key={cer.certificado} className={`rounded-xl border transition-all ${isActive ? "border-sky-300 bg-sky-50" : "border-slate-100 hover:border-slate-200 bg-slate-50/50"}`}>
-                        <button onClick={() => setCerSeleccionado(isActive ? null : cer.certificado)}
-                          className="w-full flex items-center justify-between p-4 text-left">
-                          <div className="flex items-center gap-3">
-                            <span className={`text-xs font-bold font-mono px-2.5 py-1 rounded-lg ${isActive ? "bg-sky-600 text-white" : "bg-white border border-slate-200 text-slate-600"}`}>
+                      <div key={cer.certificado} style={{border:`1px solid ${isOpen?'#7dd3fc':'#f1f5f9'}`,borderRadius:'14px',background:isOpen?'#f0f9ff':'#fafafa',overflow:'hidden',transition:'all 0.2s'}}>
+                        <button onClick={()=>setCerActivo(isOpen?null:cer.certificado)}
+                          style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',background:'none',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+                            <span style={{fontFamily:'DM Mono,monospace',fontSize:'11px',fontWeight:700,padding:'3px 10px',borderRadius:'8px',background:isOpen?'#0ea5e9':'white',color:isOpen?'white':'#475569',border:`1px solid ${isOpen?'#0ea5e9':'#e2e8f0'}`}}>
                               {cer.certificado}
                             </span>
                             <div>
-                              <p className="text-sm font-bold text-slate-800">{fmt(cer.total_importe_mes)}</p>
-                              <p className="text-xs text-slate-400">Acum: {fmt(cer.total_importe_acum)} · {cer.total_pct_acum}%</p>
+                              <div style={{fontWeight:700,fontSize:'14px',color:'#0f172a'}}>{fmt(cer.total_importe_mes)}</div>
+                              <div style={{fontSize:'11px',color:'#94a3b8'}}>Acum: {fmt(cer.total_importe_acum)} · {cer.total_pct_acum}%</div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {cer.fotos?.length > 0 && (
-                              <span className="flex items-center gap-1 text-xs font-semibold text-sky-600 bg-sky-50 px-2 py-1 rounded-lg border border-sky-200">
-                                <IconCamera /> {cer.fotos.length}
+                          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                            {fotos.length>0 && (
+                              <span style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'11px',fontWeight:700,color:'#0ea5e9',background:'#e0f2fe',padding:'3px 8px',borderRadius:'8px',border:'1px solid #bae6fd'}}>
+                                <IcoCam/> {fotos.length}
                               </span>
                             )}
                             {cer.link_cer && (
-                              <a href={cer.link_cer} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
-                                className="text-xs font-bold text-sky-600 bg-sky-50 px-2.5 py-1 rounded-lg border border-sky-200 flex items-center gap-1 hover:bg-sky-100">
-                                <IconExternal /> CER
+                              <a href={cer.link_cer} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+                                style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'11px',fontWeight:700,color:'#0ea5e9',background:'#e0f2fe',padding:'3px 10px',borderRadius:'8px',border:'1px solid #bae6fd',textDecoration:'none'}}>
+                                <IcoExt size={11}/> CER
                               </a>
                             )}
-                            <IconChevron open={isActive} />
+                            <IcoChev open={isOpen}/>
                           </div>
                         </button>
-                        {isActive && (
-                          <div className="px-4 pb-4">
-                            {cer.fotos?.length > 0 ? (
+                        {isOpen && (
+                          <div style={{padding:'0 16px 16px'}}>
+                            {fotos.length>0 ? (
                               <>
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Registro fotográfico</p>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                  {cer.fotos.map((foto, fi) => (
-                                    <button key={fi} onClick={() => setFotoAmpliada(foto)}
-                                      className="group relative overflow-hidden rounded-xl bg-slate-200 border border-slate-200 hover:border-sky-300 transition-all"
-                                      style={{aspectRatio:"4/3"}}>
-                                      <img src={driveThumb(foto.link)} alt={foto.nombre}
-                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                        onError={e => { e.target.parentElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:11px">Sin vista previa</div>'; }} />
-                                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                                        <span className="text-white text-xs font-bold">{foto.nombre}</span>
-                                      </div>
+                                <div style={{fontSize:'10px',fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:'10px'}}>Registro fotográfico</div>
+                                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
+                                  {fotos.map((f,fi)=>(
+                                    <button key={fi} onClick={()=>setFotoModal(f)}
+                                      style={{position:'relative',aspectRatio:'4/3',overflow:'hidden',borderRadius:'10px',border:'1px solid #e2e8f0',cursor:'pointer',background:'#f1f5f9',padding:0}}>
+                                      <img src={thumb(f.link)} alt={f.nombre} style={{width:'100%',height:'100%',objectFit:'cover'}}
+                                        onError={e=>{e.target.parentElement.innerHTML='<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:11px;color:#94a3b8">Sin vista previa</div>';}}/>
                                     </button>
                                   ))}
                                 </div>
                               </>
                             ) : (
-                              <p className="text-xs text-slate-400 italic">Sin fotos para este certificado.</p>
+                              <div style={{fontSize:'12px',color:'#94a3b8',fontStyle:'italic'}}>Sin fotos para este certificado.</div>
                             )}
                           </div>
                         )}
@@ -385,52 +379,52 @@ function ProyectoView({ proyecto, onBack }) {
           </div>
 
           {/* Columna lateral */}
-          <div className="space-y-6">
-            {/* Avance circular */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center">
-              <h3 className="font-bold text-slate-800 mb-5">Avance Financiero</h3>
-              <div className="relative inline-flex items-center justify-center">
-                <svg width="160" height="160" style={{transform:"rotate(-90deg)"}}>
-                  <circle cx="80" cy="80" r="66" strokeWidth="12" fill="none" stroke="#e2e8f0" />
+          <div style={{display:'flex',flexDirection:'column',gap:'20px'}}>
+
+            {/* Círculo avance */}
+            <div style={{...card,textAlign:'center'}}>
+              <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'20px'}}>Avance Financiero</div>
+              <div style={{position:'relative',display:'inline-flex',alignItems:'center',justifyContent:'center'}}>
+                <svg width="160" height="160" style={{transform:'rotate(-90deg)'}}>
+                  <circle cx="80" cy="80" r="66" strokeWidth="12" fill="none" stroke="#e2e8f0"/>
                   <circle cx="80" cy="80" r="66" strokeWidth="12" fill="none" stroke="#0ea5e9"
-                    strokeDasharray="414.69"
-                    strokeDashoffset={414.69 - (414.69 * Math.min(pctFin, 100)) / 100}
-                    strokeLinecap="round" />
+                    strokeDasharray={circum} strokeDashoffset={circum-(circum*Math.min(pctFin,100))/100}
+                    strokeLinecap="round"/>
                 </svg>
-                <div className="absolute">
-                  <p className="text-4xl font-black text-slate-900">{pctFin.toFixed(0)}%</p>
-                  <p className="text-xs font-bold text-slate-400 uppercase">pagado</p>
+                <div style={{position:'absolute',textAlign:'center'}}>
+                  <div style={{fontSize:'36px',fontWeight:900,color:'#0f172a'}}>{pctFin.toFixed(0)}%</div>
+                  <div style={{fontSize:'10px',fontWeight:700,color:'#94a3b8',textTransform:'uppercase'}}>pagado</div>
                 </div>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="bg-blue-50 rounded-xl p-3">
-                  <p className="text-xs font-bold text-blue-400 uppercase">Adjudicado</p>
-                  <p className="font-black text-blue-700 text-sm">{fmtM(adjTotal)}</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginTop:'16px'}}>
+                <div style={{background:'#eff6ff',borderRadius:'12px',padding:'12px'}}>
+                  <div style={{fontSize:'10px',fontWeight:700,color:'#93c5fd',textTransform:'uppercase'}}>Adjudicado</div>
+                  <div style={{fontWeight:800,color:'#1d4ed8',fontSize:'13px'}}>{fmtM(adj)}</div>
                 </div>
-                <div className="bg-sky-50 rounded-xl p-3">
-                  <p className="text-xs font-bold text-sky-400 uppercase">Pagado</p>
-                  <p className="font-black text-sky-700 text-sm">{fmtM(pagTotal)}</p>
+                <div style={{background:'#e0f2fe',borderRadius:'12px',padding:'12px'}}>
+                  <div style={{fontSize:'10px',fontWeight:700,color:'#7dd3fc',textTransform:'uppercase'}}>Pagado</div>
+                  <div style={{fontWeight:800,color:'#0369a1',fontSize:'13px'}}>{fmtM(pag)}</div>
                 </div>
               </div>
             </div>
 
             {/* OCs */}
-            {proyecto.ocs.length > 1 && (
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                <h3 className="font-bold text-slate-800 mb-4">Órdenes de Compra</h3>
-                <div className="space-y-3">
-                  {proyecto.ocs.map((o, i) => {
-                    const pct = o.adjudicado > 0 ? (o.pagado / o.adjudicado) * 100 : 0;
+            {proyecto.ocs.length>1 && (
+              <div style={card}>
+                <div style={{fontWeight:700,fontSize:'15px',color:'#0f172a',marginBottom:'14px'}}>Órdenes de Compra</div>
+                <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
+                  {proyecto.ocs.map((o,i)=>{
+                    const p=o.adjudicado>0?(o.pagado/o.adjudicado)*100:0;
                     return (
-                      <button key={o.oc} onClick={() => setOcActiva(i)}
-                        className={`w-full text-left p-4 rounded-xl border transition-all ${ocActiva === i ? "border-sky-300 bg-sky-50" : "border-slate-100 hover:border-slate-200 bg-slate-50/50"}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-xs font-bold font-mono text-slate-600">{o.oc}</span>
-                          <span className="text-xs font-black text-sky-600">{pct.toFixed(0)}%</span>
+                      <button key={o.oc} onClick={()=>setOcIdx(i)}
+                        style={{textAlign:'left',background:ocIdx===i?'#f0f9ff':'#fafafa',border:`1px solid ${ocIdx===i?'#7dd3fc':'#f1f5f9'}`,borderRadius:'12px',padding:'12px',cursor:'pointer',fontFamily:'inherit',transition:'all 0.2s'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
+                          <span style={{fontFamily:'DM Mono,monospace',fontSize:'11px',fontWeight:700,color:'#475569'}}>{o.oc}</span>
+                          <span style={{fontSize:'11px',fontWeight:800,color:'#0ea5e9'}}>{p.toFixed(0)}%</span>
                         </div>
-                        <p className="text-xs text-slate-500 mb-2 truncate">{o.proveedor || "Sin proveedor"}</p>
-                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                          <div className="bg-sky-500 h-1.5 rounded-full" style={{width:`${Math.min(pct,100)}%`}}></div>
+                        <div style={{fontSize:'11px',color:'#94a3b8',marginBottom:'8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{o.proveedor||'Sin proveedor'}</div>
+                        <div style={{background:'#e2e8f0',borderRadius:'999px',height:'4px',overflow:'hidden'}}>
+                          <div style={{background:'#0ea5e9',height:'100%',borderRadius:'999px',width:`${Math.min(p,100)}%`}}></div>
                         </div>
                       </button>
                     );
@@ -442,78 +436,69 @@ function ProyectoView({ proyecto, onBack }) {
             {/* Link certificado */}
             {oc.link_certificado && (
               <a href={oc.link_certificado} target="_blank" rel="noreferrer"
-                className="flex items-center justify-center gap-2 w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-xl transition-colors text-sm shadow-sm">
-                <IconExternal /> Ver certificado en Drive
+                style={{display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',background:'#0ea5e9',color:'white',fontWeight:700,padding:'14px',borderRadius:'14px',textDecoration:'none',fontSize:'14px',boxShadow:'0 4px 12px rgba(14,165,233,0.3)',transition:'background 0.2s'}}
+                onMouseOver={e=>e.currentTarget.style.background='#0284c7'} onMouseOut={e=>e.currentTarget.style.background='#0ea5e9'}>
+                <IcoExt/> Ver certificado en Drive
               </a>
             )}
           </div>
         </div>
-      </main>
+      </div>
 
-      {/* Modal foto ampliada */}
-      {fotoAmpliada && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:"rgba(0,0,0,0.85)"}}
-          onClick={() => setFotoAmpliada(null)}>
-          <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-            <img src={driveThumb(fotoAmpliada.link)} alt={fotoAmpliada.nombre}
-              className="w-full rounded-2xl shadow-2xl" />
-            <div className="absolute bottom-0 inset-x-0 flex justify-between items-end p-4 rounded-b-2xl"
-              style={{background:"linear-gradient(to top, rgba(0,0,0,0.7), transparent)"}}>
-              <span className="text-white font-bold">{fotoAmpliada.nombre}</span>
-              <a href={fotoAmpliada.link} target="_blank" rel="noreferrer"
-                className="text-white px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5"
-                style={{background:"rgba(255,255,255,0.2)"}}>
-                <IconExternal /> Drive
+      {/* Modal foto */}
+      {fotoModal && (
+        <div onClick={()=>setFotoModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+          <div onClick={e=>e.stopPropagation()} style={{position:'relative',maxWidth:'800px',width:'100%'}}>
+            <img src={thumb(fotoModal.link)} alt={fotoModal.nombre} style={{width:'100%',borderRadius:'16px',boxShadow:'0 24px 48px rgba(0,0,0,0.4)'}}/>
+            <div style={{position:'absolute',bottom:0,left:0,right:0,padding:'16px',background:'linear-gradient(to top,rgba(0,0,0,0.7),transparent)',borderRadius:'0 0 16px 16px',display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+              <span style={{color:'white',fontWeight:700}}>{fotoModal.nombre}</span>
+              <a href={fotoModal.link} target="_blank" rel="noreferrer"
+                style={{color:'white',background:'rgba(255,255,255,0.2)',padding:'6px 14px',borderRadius:'8px',fontSize:'13px',fontWeight:600,textDecoration:'none',display:'flex',alignItems:'center',gap:'6px'}}>
+                <IcoExt/> Drive
               </a>
             </div>
-            <button onClick={() => setFotoAmpliada(null)}
-              className="absolute top-3 right-3 text-white w-8 h-8 rounded-full flex items-center justify-center text-lg"
-              style={{background:"rgba(0,0,0,0.5)"}}>×</button>
+            <button onClick={()=>setFotoModal(null)}
+              style={{position:'absolute',top:'12px',right:'12px',background:'rgba(0,0,0,0.5)',border:'none',color:'white',width:'32px',height:'32px',borderRadius:'50%',fontSize:'18px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
           </div>
         </div>
       )}
-      <Footer />
+      <Footer/>
     </div>
   );
 }
 
-// ─── App principal ────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────────
 function App() {
-  const [tablero, setTablero] = useState(null);
-  const [proyectoActivo, setProyectoActivo] = useState(null);
+  const [tablero,setTablero] = useState(null);
+  const [activo,setActivo] = useState(null);
 
-  useEffect(() => {
-    fetch("tablero.json")
-      .then(r => { if (!r.ok) throw new Error("No se pudo cargar tablero.json"); return r.json(); })
-      .then(data => setTablero(data))
-      .catch(err => { console.error(err); setTablero([]); });
-  }, []);
+  useEffect(()=>{
+    fetch('tablero.json')
+      .then(r=>{ if(!r.ok) throw new Error('No se pudo cargar tablero.json'); return r.json(); })
+      .then(data=>setTablero(data))
+      .catch(err=>{ console.error(err); setTablero([]); });
+  },[]);
 
-  if (!tablero) {
-    return (
-      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-        <div className="bg-white p-10 rounded-3xl shadow-lg flex flex-col items-center border border-slate-100">
-          <div className="relative mb-5">
-            <div className="absolute inset-0 bg-sky-100 rounded-full" style={{animation:"ping 1s cubic-bezier(0,0,0.2,1) infinite"}}></div>
-            <div className="relative bg-sky-600 p-4 rounded-full text-white"><IconHardHat /></div>
-          </div>
-          <h2 className="text-xl font-black text-slate-800 mb-1">Cargando Tablero</h2>
-          <p className="text-slate-400 text-sm">Procesando certificados y actas de medición...</p>
-          <div className="w-48 bg-slate-100 h-1.5 rounded-full mt-5 overflow-hidden">
-            <div className="bg-sky-500 h-full rounded-full" style={{width:"50%",animation:"pulse 2s cubic-bezier(0.4,0,0.6,1) infinite"}}></div>
-          </div>
+  if(!tablero) return (
+    <div style={{minHeight:'100vh',background:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{background:'white',borderRadius:'24px',padding:'48px',boxShadow:'0 8px 32px rgba(0,0,0,0.08)',textAlign:'center',border:'1px solid #e2e8f0'}}>
+        <div style={{background:'#0ea5e9',padding:'16px',borderRadius:'50%',display:'inline-flex',marginBottom:'20px'}}>
+          <IcoHat size={28}/>
+        </div>
+        <div style={{fontSize:'20px',fontWeight:800,color:'#0f172a',marginBottom:'8px'}}>Cargando Tablero</div>
+        <div style={{color:'#94a3b8',fontSize:'14px'}}>Procesando certificados y actas de medición...</div>
+        <div style={{width:'200px',height:'4px',background:'#e2e8f0',borderRadius:'999px',margin:'20px auto 0',overflow:'hidden'}}>
+          <div style={{background:'#0ea5e9',height:'100%',width:'60%',borderRadius:'999px',animation:'pulse 1.5s ease-in-out infinite'}}></div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (proyectoActivo) {
-    return <ProyectoView proyecto={proyectoActivo} onBack={() => setProyectoActivo(null)} />;
-  }
-  return <IndexView tablero={tablero} onSelect={setProyectoActivo} />;
+  if(activo) return <DetalleView proyecto={activo} onBack={()=>setActivo(null)}/>;
+  return <IndexView tablero={tablero} onSelect={setActivo}/>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
