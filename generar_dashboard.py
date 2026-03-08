@@ -52,6 +52,15 @@ def limpiar_num(valor):
 def fig_to_html(fig):
     return pio.to_html(fig, full_html=False, include_plotlyjs=False)
 
+def drive_link_a_thumbnail(link, ancho=800):
+    """Convierte link de Drive (/view) a URL de thumbnail embebible en <img>."""
+    import re
+    m = re.search(r'/file/d/([^/]+)', link)
+    if m:
+        file_id = m.group(1)
+        return f"https://drive.google.com/thumbnail?id={file_id}&sz=w{ancho}"
+    return link  # si no matchea, devuelve el link original
+
 # =============================================
 # GENERAMOS UN HTML POR PROYECTO
 # =============================================
@@ -83,18 +92,17 @@ for proyecto in tablero:
     fig_fin.add_trace(go.Bar(name="Pagado", x=oc_labels, y=oc_pag, marker_color="#2ecc71", text=[f"${v:,.0f}" for v in oc_pag], textposition="outside"))
     fig_fin.update_layout(title="💰 Avance Financiero por OC", barmode="overlay", yaxis_title="Monto ($)", xaxis_title="Orden de Compra", legend=dict(orientation="h", y=-0.2), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, margin=dict(l=20, r=20, t=40, b=20))
 
-    # --- GRAFICO 2: Línea de Importes por CER ---
+    # --- GRAFICO 2: Línea de Importes Acumulados por CER ---
     fig_linea = go.Figure()
     for idx, oc in enumerate(ocs):
         historial = oc.get("historial_cer", [])
         if historial:
-            pares    = [(h["certificado"], limpiar_num(h["total_importe_mes"])) for h in historial if limpiar_num(h["total_importe_mes"]) >= 0]
-            certs    = [p[0] for p in pares]
-            importes = [p[1] for p in pares]
-            if certs:
-                visible = True if idx == 0 else "legendonly"
-                fig_linea.add_trace(go.Scatter(x=certs, y=importes, mode="lines+markers+text", name=oc["oc"], visible=visible, text=[f"${v:,.0f}" for v in importes], textposition="top center", hovertemplate="<b>%{x}</b><br>Importe Mes: $%{y:,.0f}<extra></extra>", marker=dict(size=10), line=dict(width=2)))
-    fig_linea.update_layout(title="📈 Importe Ejecutado por Certificado", xaxis_title="Certificado", yaxis_title="Importe del Mes ($)", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend=dict(title="OC — clic para mostrar/ocultar", orientation="h", y=-0.2), height=350, margin=dict(l=20, r=20, t=40, b=20))
+            certs      = [h["certificado"] for h in historial]
+            importes   = [limpiar_num(h["total_importe_acum"]) for h in historial]
+            visible    = True if idx == 0 else "legendonly"
+            fig_linea.add_trace(go.Scatter(x=certs, y=importes, mode="lines+markers+text", name=oc["oc"], visible=visible, text=[f"${v:,.0f}" for v in importes], textposition="top center", hovertemplate="<b>%{x}</b><br>Importe Acum: $%{y:,.0f}<extra></extra>", marker=dict(size=10), line=dict(width=2)))
+    fig_linea.update_layout(title="📈 Evolución de Importes Acumulados por Certificado", xaxis_title="Certificado", yaxis_title="Importe Acumulado ($)", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend=dict(title="OC — clic para mostrar/ocultar", orientation="h", y=-0.2), height=350, margin=dict(l=20, r=20, t=40, b=20))
+
     # --- GRAFICO 3: Avance Físico por Ítem ---
     html_fisico = ""
     for oc in ocs:
@@ -132,6 +140,49 @@ for proyecto in tablero:
                 </tr>
                 """
 
+            # Fotos del certificado activo
+            fotos_cer = []
+            cert_activo = oc.get("certificado", "")
+            for h in oc.get("historial_cer", []):
+                if h.get("certificado") == cert_activo:
+                    fotos_cer = h.get("fotos", [])
+                    break
+
+            html_fotos = ""
+            if fotos_cer:
+                cards_fotos = ""
+                for foto in fotos_cer:
+                    thumb = drive_link_a_thumbnail(foto["link"])
+                    cards_fotos += f"""
+                    <div class="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100 aspect-[4/3] shadow-sm">
+                        <img src="{thumb}" alt="{foto['nombre']}"
+                             class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                             loading="lazy"
+                             onerror="this.parentElement.innerHTML='<div class=\'flex items-center justify-center h-full text-slate-400 text-xs font-medium\'>Sin vista previa</div>'"
+                        />
+                        <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3">
+                            <span class="text-white text-xs font-bold">{foto['nombre']}</span>
+                        </div>
+                        <a href="{foto['link']}" target="_blank"
+                           class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                            <span class="bg-white text-slate-800 text-xs font-bold px-3 py-1.5 rounded-lg shadow">
+                                <i data-lucide="external-link" class="w-3 h-3 inline mr-1"></i>Ver en Drive
+                            </span>
+                        </a>
+                    </div>
+                    """
+                html_fotos = f"""
+                <div class="mt-6 pt-6 border-t border-slate-100">
+                    <h6 class="text-sm font-bold text-slate-500 uppercase mb-4 flex items-center gap-2">
+                        <i data-lucide="camera" class="w-4 h-4"></i> Registro Fotográfico — {cert_activo}
+                        <span class="ml-auto text-slate-400 font-normal normal-case">{len(fotos_cer)} foto(s)</span>
+                    </h6>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {cards_fotos}
+                    </div>
+                </div>
+                """
+
             html_fisico += f"""
             <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mb-8">
                 <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
@@ -159,6 +210,7 @@ for proyecto in tablero:
                         <tbody>{filas_items}</tbody>
                     </table>
                 </div>
+                {html_fotos}
             </div>
             """
 
