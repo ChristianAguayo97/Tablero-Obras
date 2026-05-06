@@ -347,7 +347,7 @@
     "presupuesto": " $250,000,000.00",
     "ocs": [
       {
-        "oc": "SP-1973-1668",
+        "oc": "SP-1973-1714",
         "proveedor": "",
         "comprometido": 899100000.0,
         "adjudicado": 0.0,
@@ -1335,7 +1335,7 @@
         "adjudicado": 4302564929.0,
         "pagado": 1608522376.9,
         "porcentaje": 0.37385197049748,
-        "estado": "En Ejecución / Pendiente de Pago: Contaduria  - Generar orden de pago desde hace 19 días",
+        "estado": "En Ejecución / Pendiente de Pago: Obras - ANULADO desde hace 19 días",
         "certificado": null,
         "fecha_inicio": "",
         "fecha_fin_estimada": "",
